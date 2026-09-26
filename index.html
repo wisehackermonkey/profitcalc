@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>profit first Cclculator</title>
+  <title>profit first Clculator</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,16 +20,17 @@
   <label>Paying debt service with profit (95%)? <input type="checkbox" id="debtSplit" oninput="calculate()"></label>
 
   <br><br>
+  <small>Tap any amount to copy it to your clipboard.</small>
 
   <table border="1" cellpadding="6">
-    <tr><th>Item</th><th>Fixed %</th><th>Amount</th><th>OpEx %</th></tr>
-    <tr><td>Profit</td><td id="profitFixedPct"></td><td id="profit"></td><td></td></tr>
-    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95%)</td><td>95%</td><td id="debtService"></td><td></td></tr>
-    <tr id="remainderRow" style="display:none"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td>5%</td><td id="remainderProfit"></td><td></td></tr>
-    <tr><td>Owner's Pay</td><td>15%</td><td id="owners"></td><td></td></tr>
-    <tr id="taxRow"><td>Tax</td><td id="taxFixedPct"></td><td id="tax"></td><td></td></tr>
-    <tr><td>Operating Expenses (OpEx)</td><td></td><td id="opex"></td><td id="opexPct"></td></tr>
-    <tr><td><strong>Total</strong></td><td></td><td id="total"></td><td></td></tr>
+    <tr><th>Item</th><th>Fixed %</th><th>Amount</th></tr>
+    <tr><td>Profit (coppel)</td><td id="profitFixedPct"></td><td id="profit" onclick="copyAmount(this)"></tr>
+    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95%)</td><td>95%</td><td id="debtService" onclick="copyAmount(this)"></tr>
+    <tr id="remainderRow" style="display:none"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td>5%</td><td id="remainderProfit" onclick="copyAmount(this)"></tr>
+    <tr><td>Owner's Pay (bbva personal) </td><td>15%</td><td id="owners" onclick="copyAmount(this)"></tr>
+    <tr id="taxRow"><td>Tax (mercadopago)</td><td id="taxFixedPct"></td><td id="tax" onclick="copyAmount(this)"></tr>
+    <tr><td>OpEx (banorte) </td><td id="opexPct"></td><td id="opex" onclick="copyAmount(this)"></td></tr>
+    <tr><td><strong>Total</strong></td><td></td><td id="total" onclick="copyAmount(this)"></tr>
   </table>
 
   <script>
@@ -66,6 +67,38 @@
       document.getElementById("taxRow").style.opacity        = taxed ? "1" : "0.4";
       document.getElementById("debtRow").style.display       = debtSplit ? "" : "none";
       document.getElementById("remainderRow").style.display  = debtSplit ? "" : "none";
+    }
+
+    function copyAmount(cell) {
+      const value = cell.textContent;
+      if (!value) return;
+
+      const finish = () => {
+        const original = cell.textContent;
+        const originalBg = cell.style.backgroundColor;
+        cell.textContent = "Copied!";
+        cell.style.backgroundColor = "#c8f7c5";
+        setTimeout(() => {
+          cell.textContent = original === "Copied!" ? value : original;
+          cell.style.backgroundColor = originalBg;
+        }, 600);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(finish).catch(finish);
+      } else {
+        // Fallback for older browsers / non-secure contexts
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try { document.execCommand("copy"); } catch (e) {}
+        document.body.removeChild(textarea);
+        finish();
+      }
     }
 
     if ("serviceWorker" in navigator) {
