@@ -24,12 +24,12 @@
 
   <table border="1" cellpadding="6">
     <tr><th>Item</th><th>Fixed %</th><th>Amount</th></tr>
-    <tr><td>Profit (coppel)</td><td id="profitFixedPct"></td><td id="profit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
-    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95%)</td><td>95%</td><td id="debtService" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
-    <tr id="remainderRow" style="display:none"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td>5%</td><td id="remainderProfit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
-    <tr><td>Owner's Pay (bbva personal) </td><td>15%</td><td id="owners" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
-    <tr id="taxRow"><td>Tax (mercadopago)</td><td id="taxFixedPct"></td><td id="tax" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
-    <tr><td>OpEx (banorte) </td><td id="opexPct"></td><td id="opex" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
+    <tr><td>Profit</td><td id="profitFixedPct"></td><td id="profit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bancoppel</td></tr>
+    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95%)</td><td>95%</td><td id="debtService" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>to debt service</td></tr>
+    <tr id="remainderRow" style="display:none"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td>5%</td><td id="remainderProfit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bancoppel leftover</td></tr>
+    <tr><td>OwnComp</td><td>15%</td><td id="owners" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bbva personal </td></tr>
+    <tr id="taxRow"><td>Tax</td><td id="taxFixedPct"></td><td id="tax" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>mercadopago</td></tr>
+    <tr><td>OpEx</td><td id="opexPct"></td><td id="opex" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>banorte</td></tr>
     <tr><td><strong>Total</strong></td><td></td><td id="total" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
 
   </table>
