@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>profit first Cclculator</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BalanceCalc">
+</head>
+<body>
+
+  <h2>Balance Calculator</h2>
+
+  <label>Balance (b): <input type="number" id="balance" value="0" inputmode="decimal" oninput="calculate()"></label><br><br>
+  <label>Profit %: <input type="number" id="profitRate" value="30" inputmode="decimal" oninput="calculate()"></label><br><br>
+  <label>Owner's Pay %: <input type="number" id="ownersRate" value="15" inputmode="decimal" oninput="calculate()"></label><br><br>
+  <label>Taxed? <input type="checkbox" id="taxed" checked oninput="calculate()"></label><br><br>
+  <label>Paying debt service with profit (95%)? <input type="checkbox" id="debtSplit" oninput="calculate()"></label>
+
+  <br><br>
+
+  <table border="1" cellpadding="6">
+    <tr><th>Item</th><th>Fixed %</th><th>Amount</th><th>OpEx %</th></tr>
+    <tr><td>Profit</td><td id="profitFixedPct"></td><td id="profit"></td><td></td></tr>
+    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95%)</td><td>95%</td><td id="debtService"></td><td></td></tr>
+    <tr id="remainderRow" style="display:none"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td>5%</td><td id="remainderProfit"></td><td></td></tr>
+    <tr><td>Owner's Pay</td><td>15%</td><td id="owners"></td><td></td></tr>
+    <tr id="taxRow"><td>Tax</td><td id="taxFixedPct"></td><td id="tax"></td><td></td></tr>
+    <tr><td>Operating Expenses (OpEx)</td><td></td><td id="opex"></td><td id="opexPct"></td></tr>
+    <tr><td><strong>Total</strong></td><td></td><td id="total"></td><td></td></tr>
+  </table>
+
+  <script>
+    const TAX_RATE = 1 - 25/29;
+
+    function calculate() {
+      const b          = parseFloat(document.getElementById("balance").value)    || 0;
+      const profitRate = parseFloat(document.getElementById("profitRate").value) / 100 || 0;
+      const ownersRate = parseFloat(document.getElementById("ownersRate").value) / 100 || 0;
+      const taxed      = document.getElementById("taxed").checked;
+      const debtSplit  = document.getElementById("debtSplit").checked;
+
+      const profit  = b * profitRate;
+      const owners  = b * ownersRate;
+      const tax     = taxed ? b * TAX_RATE : 0;
+      const opex    = b - profit - owners - tax;
+      const total   = profit + owners + tax + opex;
+      const opexPct = b !== 0 ? (opex / b) * 100 : 0;
+
+      const debtService     = profit * 0.95;
+      const remainderProfit = profit * 0.05;
+
+      document.getElementById("profit").textContent          = profit.toFixed(2);
+      document.getElementById("owners").textContent          = owners.toFixed(2);
+      document.getElementById("tax").textContent             = tax.toFixed(2);
+      document.getElementById("opex").textContent            = opex.toFixed(2);
+      document.getElementById("total").textContent           = total.toFixed(2);
+      document.getElementById("opexPct").textContent         = opexPct.toFixed(2) + "%";
+      document.getElementById("profitFixedPct").textContent  = (profitRate * 100).toFixed(0) + "%";
+      document.getElementById("taxFixedPct").textContent     = (TAX_RATE * 100).toFixed(2) + "%";
+      document.getElementById("debtService").textContent     = debtService.toFixed(2);
+      document.getElementById("remainderProfit").textContent = remainderProfit.toFixed(2);
+
+      document.getElementById("taxRow").style.opacity        = taxed ? "1" : "0.4";
+      document.getElementById("debtRow").style.display       = debtSplit ? "" : "none";
+      document.getElementById("remainderRow").style.display  = debtSplit ? "" : "none";
+    }
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js");
+    }
+
+    calculate();
+  </script>
+
+</body>
+</html>
