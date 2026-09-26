@@ -77,10 +77,10 @@
       const finish = () => {
         const original = cell.textContent;
         const originalBg = cell.style.backgroundColor;
-        cell.textContent = "Copied!";
+        // cell.textContent = "Copied!";
         cell.style.backgroundColor = "#c8f7c5";
         setTimeout(() => {
-          cell.textContent = original === "Copied!" ? value : original;
+          // cell.textContent = original === "Copied!" ? value : original;
           cell.style.backgroundColor = originalBg;
         }, 600);
       };
