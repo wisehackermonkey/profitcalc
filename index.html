@@ -26,10 +26,10 @@
   <table border="1" cellpadding="6">
     <tr><th>Item</th><th>Fixed %</th><th>Amount</th></tr>
     <tr><td>Profit</td><td id="profitFixedPct"></td><td id="profit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bancoppel</td></tr>
-    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95%)</td><td id="debtPct"></td><td id="debtService" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>to debt service</td></tr>
+    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95% profit + INV)</td><td id="debtPct"></td><td id="debtService" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>to debt service</td></tr>
     <tr id="remainderRow" style="display:none"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td id="remainderPct"></td><td id="remainderProfit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bancoppel leftover</td></tr>
     <tr><td>OwnComp</td><td id="ownersFixedPct"></td><td id="owners" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bbva personal </td></tr>
-    <tr><td>INV</td><td id="invFixedPct"></td><td id="inv" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>Openbank</td></tr>
+    <tr id="invRow"><td>INV</td><td id="invFixedPct"></td><td id="inv" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>Openbank</td></tr>
     <tr id="taxRow"><td>Tax</td><td id="taxFixedPct"></td><td id="tax" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>mercadopago</td></tr>
     <tr><td>OpEx</td><td id="opexPct"></td><td id="opex" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>banorte</td></tr>
     <tr><td><strong>Total</strong></td><td></td><td id="total" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
@@ -90,16 +90,19 @@
       const opex    = b - profit - owners - inv - tax;
       const total   = profit + owners + inv + tax + opex;
 
-      const debtService     = profit * 0.95;
-      const remainderProfit = profit - debtService;
+      // Debt service = 95% of profit, plus the whole INV 15% when checked
+      const debtFromProfit  = profit * 0.95;
+      const debtService     = debtFromProfit + (debtSplit ? inv : 0);
+      const remainderProfit = profit - debtFromProfit;
 
       // Rounded percentages that tie out to 100.00
       const profitPct    = r2(adjProfitRate * 100);
       const ownersPct    = r2(ownersRate * 100);
       const invPct       = r2(INV_RATE * 100);
       const taxPct       = r2(TAX_RATE * 100);
-      const debtPct      = r2(profitPct * 0.95);
-      const remainderPct = r2(profitPct - debtPct);
+      const debtProfitPct = r2(profitPct * 0.95);
+      const debtPct      = r2(debtProfitPct + (debtSplit ? invPct : 0));
+      const remainderPct = r2(profitPct - debtProfitPct);
       const opexPct      = r2(100 - profitPct - ownersPct - invPct - (taxed ? taxPct : 0));
 
       document.getElementById("profit").textContent          = profit.toFixed(2);
@@ -121,6 +124,7 @@
       document.getElementById("taxRow").style.opacity        = taxed ? "1" : "0.4";
       document.getElementById("debtRow").style.display       = debtSplit ? "" : "none";
       document.getElementById("remainderRow").style.display  = debtSplit ? "" : "none";
+      document.getElementById("invRow").style.display        = debtSplit ? "none" : "";
 
       saveState();
     }
@@ -130,12 +134,9 @@
       if (!value) return;
 
       const finish = () => {
-        const original = cell.textContent;
         const originalBg = cell.style.backgroundColor;
-        // cell.textContent = "Copied!";
         cell.style.backgroundColor = "#c8f7c5";
         setTimeout(() => {
-          // cell.textContent = original === "Copied!" ? value : original;
           cell.style.backgroundColor = originalBg;
         }, 600);
       };
