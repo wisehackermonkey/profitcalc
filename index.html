@@ -13,7 +13,8 @@
 
   <h2>Balance Calculator</h2>
 
-  <label>Balance (b): <input type="number" id="balance" value="" inputmode="decimal" oninput="calculate()"></label><br><br>
+  <label>Balance (b): <input type="number" id="balance" value="" inputmode="decimal" oninput="calculate()"></label>
+  <button type="button" onclick="clearBalance()">Clear Balance</button><br><br>
   <label>Profit %: <input type="number" id="profitRate" value="30" inputmode="decimal" oninput="calculate()"></label><br><br>
   <label>Owner's Pay %: <input type="number" id="ownersRate" value="15" inputmode="decimal" oninput="calculate()"></label><br><br>
   <label>Taxed? <input type="checkbox" id="taxed" checked oninput="calculate()"></label><br><br>
@@ -40,6 +41,35 @@
     const TAX_RATE = TAX_FULL_RATE / 2;            // ~6.90% (half of tax)
     const INV_RATE = 0.15;                         // 15% INV
     const INV_FROM_PROFIT = INV_RATE - TAX_RATE;   // ~8.10% taken from profit
+
+    const STORAGE_KEY = "balanceCalcState";
+
+    function saveState() {
+      try {
+        const state = {
+          balance:   document.getElementById("balance").value,
+          taxed:     document.getElementById("taxed").checked,
+          debtSplit: document.getElementById("debtSplit").checked
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const state = JSON.parse(raw);
+        if (state.balance !== undefined) document.getElementById("balance").value = state.balance;
+        if (state.taxed !== undefined) document.getElementById("taxed").checked = !!state.taxed;
+        if (state.debtSplit !== undefined) document.getElementById("debtSplit").checked = !!state.debtSplit;
+      } catch (e) {}
+    }
+
+    function clearBalance() {
+      document.getElementById("balance").value = "";
+      calculate();
+    }
 
     function calculate() {
       const b          = parseFloat(document.getElementById("balance").value)    || 0;
@@ -77,6 +107,8 @@
       document.getElementById("taxRow").style.opacity        = taxed ? "1" : "0.4";
       document.getElementById("debtRow").style.display       = debtSplit ? "" : "none";
       document.getElementById("remainderRow").style.display  = debtSplit ? "" : "none";
+
+      saveState();
     }
 
     function copyAmount(cell) {
@@ -115,6 +147,7 @@
       navigator.serviceWorker.register("./sw.js");
     }
 
+    loadState();
     calculate();
   </script>
 
