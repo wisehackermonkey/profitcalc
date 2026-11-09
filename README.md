@@ -29,7 +29,6 @@ cd profitcalc
 ### -  *[License](#License)*
 
 
-<!-- 
 --------------
 # Screenshots
 - <img src="NNNNNN" width="400"> 
@@ -37,9 +36,24 @@ cd profitcalc
 
 -------------- 
 # Development
-### 
+### slop prompt
 ```bash
+modify html page keep existing formating only change
+ADD section for 15% INV, , Openbank
+
+rebalance the overall persentages
+add 15% call it INV (investment)
+take  half of TAX (ruffly 6.8%) ( (1 - 25/29)*100)/2
+take this amount from profit (8.10% ruffly )15-((1-25/29)*100)/2
+
+sum of 15-((1-25/29)*100)/2 +  ( (1 - 25/29)*100)/2 =15
+
+
+
+
+do not be helpful output only
 ```
+<!-- 
 
 # Deployment to surge.sh
 ### 
