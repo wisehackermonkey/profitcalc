@@ -8,6 +8,13 @@
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BalanceCalc">
+  <style>
+    #bar { display: flex; height: 28px; border: 1px solid #000; color: #fff; font-size: 14px; }
+    #bar div { display: flex; align-items: center; overflow: hidden; white-space: nowrap; padding: 0 4px; }
+    #barDone { background: #2e9e4f; }
+    #barLeft { background: #2f6fd6; justify-content: flex-end; flex: 1; }
+    #settings { display: none; border: 1px solid #000; padding: 8px; margin: 8px 0; }
+  </style>
 </head>
 <body>
 
@@ -18,9 +25,20 @@
   <label>Profit %: <input type="number" id="profitRate" value="30" inputmode="decimal" oninput="calculate()"></label><br><br>
   <label>Owner's Pay %: <input type="number" id="ownersRate" value="15" inputmode="decimal" oninput="calculate()"></label><br><br>
   <label>Taxed? <input type="checkbox" id="taxed" checked oninput="calculate()"></label><br><br>
-  <label>Paying debt service with profit (95%)? <input type="checkbox" id="debtSplit" oninput="calculate()"></label>
+  <label>Paying debt service with profit (95%)? <input type="checkbox" id="debtSplit" oninput="calculate()"></label><br><br>
+  <label>Split OpEx? <input type="checkbox" id="opexSplit" oninput="calculate()"></label>
+  <button type="button" onclick="toggleSettings()">Settings</button>
 
-  <br><br>
+  <div id="settings">
+    <strong>OpEx split</strong>
+    <div id="settingsRows"></div>
+    <button type="button" onclick="addRow()">+ Add</button>
+    <button type="button" onclick="saveSettings()">Save</button>
+    <button type="button" onclick="resetSettings()">Reset defaults</button>
+    <div id="settingsSum"></div>
+  </div>
+
+  <br>
   <small>Tap any amount to copy it to your clipboard.</small>
 
   <table border="1" cellpadding="6">
@@ -32,9 +50,21 @@
     <tr id="invRow"><td>INV</td><td id="invFixedPct"></td><td id="inv" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>Openbank</td></tr>
     <tr id="taxRow"><td>Tax</td><td id="taxFixedPct"></td><td id="tax" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>mercadopago</td></tr>
     <tr><td>OpEx</td><td id="opexPct"></td><td id="opex" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>banorte</td></tr>
+    <tbody id="opexRows"></tbody>
     <tr><td><strong>Total</strong></td><td></td><td id="total" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
-
   </table>
+
+  <h3>Goal</h3>
+  <label>Target: <input type="number" id="target" value="0" inputmode="decimal" oninput="updateGoal()"></label>
+  <button type="button" onclick="saveTarget()">Save Target</button><br><br>
+  <label>Add: <input type="number" id="addAmt" value="" inputmode="decimal" oninput="addEdited = true"></label>
+  <button type="button" onclick="addToGoal()">Add Towards Goal</button>
+  <button type="button" onclick="resetGoal()">Reset Progress</button>
+  <p>Saved: <span id="saved">0.00</span> / <span id="targetShown">0.00</span> (<span id="goalPct">0.00</span>%)</p>
+  <div id="bar">
+    <div id="barDone" style="width:0%"><span id="barDoneLbl">0%</span></div>
+    <div id="barLeft"><span id="barLeftLbl">100%</span></div>
+  </div>
 
   <script>
     const TAX_FULL_RATE = 1 - 25/29;               // ~13.79%
@@ -42,44 +72,71 @@
     const INV_RATE = 0.15;                         // 15% INV
     const INV_FROM_PROFIT = INV_RATE - TAX_RATE;   // ~8.10% taken from profit
 
-    const STORAGE_KEY = "balanceCalcState";
+    const STORAGE_KEY  = "balanceCalcState";
+    const SETTINGS_KEY = "balanceCalcOpex";
+    const TARGET_KEY   = "balanceCalcTarget";
+    const SAVED_KEY    = "balanceCalcSaved";
+
+    const DEFAULT_OPEX = [
+      { n: "Labor", p: 57 },
+      { n: "Accountant", p: 3 },
+      { n: "Biz Savings", p: 15 },
+      { n: "War Chest", p: 5 },
+      { n: "Equipment", p: 5 },
+      { n: "Christmas Bonus", p: 15 }
+    ];
+
+    let opexItems = DEFAULT_OPEX.map(x => ({ ...x }));
+    let savedTotal = 0;
+    let addEdited = false;
+
+    const $ = id => document.getElementById(id);
 
     // Round to 2 decimals (half-up, float-safe)
     function r2(x) { return Math.round(x * 100 + 1e-6) / 100; }
 
+    function get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+    function set(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
     function saveState() {
-      try {
-        const state = {
-          balance:   document.getElementById("balance").value,
-          taxed:     document.getElementById("taxed").checked,
-          debtSplit: document.getElementById("debtSplit").checked
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (e) {}
+      set(STORAGE_KEY, JSON.stringify({
+        balance:   $("balance").value,
+        taxed:     $("taxed").checked,
+        debtSplit: $("debtSplit").checked,
+        opexSplit: $("opexSplit").checked
+      }));
     }
 
     function loadState() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
-        const state = JSON.parse(raw);
-        if (state.balance !== undefined) document.getElementById("balance").value = state.balance;
-        if (state.taxed !== undefined) document.getElementById("taxed").checked = !!state.taxed;
-        if (state.debtSplit !== undefined) document.getElementById("debtSplit").checked = !!state.debtSplit;
+        const raw = get(STORAGE_KEY);
+        if (raw) {
+          const s = JSON.parse(raw);
+          if (s.balance !== undefined) $("balance").value = s.balance;
+          if (s.taxed !== undefined) $("taxed").checked = !!s.taxed;
+          if (s.debtSplit !== undefined) $("debtSplit").checked = !!s.debtSplit;
+          if (s.opexSplit !== undefined) $("opexSplit").checked = !!s.opexSplit;
+        }
+        const o = get(SETTINGS_KEY);
+        if (o) opexItems = JSON.parse(o);
+        const t = get(TARGET_KEY);
+        if (t !== null) $("target").value = t;
+        savedTotal = parseFloat(get(SAVED_KEY)) || 0;
       } catch (e) {}
     }
 
     function clearBalance() {
-      document.getElementById("balance").value = "";
+      $("balance").value = "";
+      addEdited = false;
       calculate();
     }
 
     function calculate() {
-      const b          = parseFloat(document.getElementById("balance").value)    || 0;
-      const profitRate = parseFloat(document.getElementById("profitRate").value) / 100 || 0;
-      const ownersRate = parseFloat(document.getElementById("ownersRate").value) / 100 || 0;
-      const taxed      = document.getElementById("taxed").checked;
-      const debtSplit  = document.getElementById("debtSplit").checked;
+      const b          = parseFloat($("balance").value)    || 0;
+      const profitRate = parseFloat($("profitRate").value) / 100 || 0;
+      const ownersRate = parseFloat($("ownersRate").value) / 100 || 0;
+      const taxed      = $("taxed").checked;
+      const debtSplit  = $("debtSplit").checked;
 
       const adjProfitRate = profitRate - INV_FROM_PROFIT;
 
@@ -105,28 +162,113 @@
       const remainderPct = r2(profitPct - debtProfitPct);
       const opexPct      = r2(100 - profitPct - ownersPct - invPct - (taxed ? taxPct : 0));
 
-      document.getElementById("profit").textContent          = profit.toFixed(2);
-      document.getElementById("owners").textContent          = owners.toFixed(2);
-      document.getElementById("inv").textContent             = inv.toFixed(2);
-      document.getElementById("tax").textContent             = tax.toFixed(2);
-      document.getElementById("opex").textContent            = opex.toFixed(2);
-      document.getElementById("total").textContent           = total.toFixed(2);
-      document.getElementById("opexPct").textContent         = opexPct.toFixed(2) + "%";
-      document.getElementById("profitFixedPct").textContent  = profitPct.toFixed(2) + "%";
-      document.getElementById("ownersFixedPct").textContent  = ownersPct.toFixed(2) + "%";
-      document.getElementById("invFixedPct").textContent     = invPct.toFixed(2) + "%";
-      document.getElementById("taxFixedPct").textContent     = taxPct.toFixed(2) + "%";
-      document.getElementById("debtPct").textContent         = debtPct.toFixed(2) + "%";
-      document.getElementById("remainderPct").textContent    = remainderPct.toFixed(2) + "%";
-      document.getElementById("debtService").textContent     = debtService.toFixed(2);
-      document.getElementById("remainderProfit").textContent = remainderProfit.toFixed(2);
+      $("profit").textContent          = profit.toFixed(2);
+      $("owners").textContent          = owners.toFixed(2);
+      $("inv").textContent             = inv.toFixed(2);
+      $("tax").textContent             = tax.toFixed(2);
+      $("opex").textContent            = opex.toFixed(2);
+      $("total").textContent           = total.toFixed(2);
+      $("opexPct").textContent         = opexPct.toFixed(2) + "%";
+      $("profitFixedPct").textContent  = profitPct.toFixed(2) + "%";
+      $("ownersFixedPct").textContent  = ownersPct.toFixed(2) + "%";
+      $("invFixedPct").textContent     = invPct.toFixed(2) + "%";
+      $("taxFixedPct").textContent     = taxPct.toFixed(2) + "%";
+      $("debtPct").textContent         = debtPct.toFixed(2) + "%";
+      $("remainderPct").textContent    = remainderPct.toFixed(2) + "%";
+      $("debtService").textContent     = debtService.toFixed(2);
+      $("remainderProfit").textContent = remainderProfit.toFixed(2);
 
-      document.getElementById("taxRow").style.opacity        = taxed ? "1" : "0.4";
-      document.getElementById("debtRow").style.display       = debtSplit ? "" : "none";
-      document.getElementById("remainderRow").style.display  = debtSplit ? "" : "none";
-      document.getElementById("invRow").style.display        = debtSplit ? "none" : "";
+      $("taxRow").style.opacity        = taxed ? "1" : "0.4";
+      $("debtRow").style.display       = debtSplit ? "" : "none";
+      $("remainderRow").style.display  = debtSplit ? "" : "none";
+      $("invRow").style.display        = debtSplit ? "none" : "";
+
+      // OpEx split rows
+      let html = "";
+      if ($("opexSplit").checked) {
+        opexItems.forEach(it => {
+          const amt = opex * (parseFloat(it.p) || 0) / 100;
+          html += "<tr><td>&nbsp;&nbsp;↳ " + esc(it.n) + "</td><td>" + (parseFloat(it.p) || 0).toFixed(2) +
+                  "%</td><td ontouchstart=\"copyAmount(this)\" onclick=\"copyAmount(this)\">" + amt.toFixed(2) + "</td></tr>";
+        });
+      }
+      $("opexRows").innerHTML = html;
+
+      // Auto-fill add amount with current balance unless user edited it
+      if (!addEdited) $("addAmt").value = b ? b.toFixed(2) : "";
 
       saveState();
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    // ---- Settings ----
+    function toggleSettings() {
+      const el = $("settings");
+      const open = el.style.display !== "block";
+      el.style.display = open ? "block" : "none";
+      if (open) renderSettings();
+    }
+
+    function renderSettings() {
+      $("settingsRows").innerHTML = opexItems.map((it, i) =>
+        "<div><input type=\"text\" value=\"" + esc(it.n) + "\" oninput=\"opexItems[" + i + "].n=this.value;sumCheck()\"> " +
+        "<input type=\"number\" value=\"" + it.p + "\" inputmode=\"decimal\" style=\"width:70px\" oninput=\"opexItems[" + i + "].p=this.value;sumCheck()\">% " +
+        "<button type=\"button\" onclick=\"delRow(" + i + ")\">✕</button></div>"
+      ).join("");
+      sumCheck();
+    }
+
+    function sumCheck() {
+      const s = opexItems.reduce((a, it) => a + (parseFloat(it.p) || 0), 0);
+      $("settingsSum").textContent = "Total: " + r2(s).toFixed(2) + "%" + (Math.abs(s - 100) > 0.001 ? " (should be 100)" : "");
+    }
+
+    function addRow() { opexItems.push({ n: "", p: 0 }); renderSettings(); }
+    function delRow(i) { opexItems.splice(i, 1); renderSettings(); }
+
+    function saveSettings() {
+      set(SETTINGS_KEY, JSON.stringify(opexItems));
+      calculate();
+    }
+
+    function resetSettings() {
+      opexItems = DEFAULT_OPEX.map(x => ({ ...x }));
+      set(SETTINGS_KEY, JSON.stringify(opexItems));
+      renderSettings();
+      calculate();
+    }
+
+    // ---- Goal ----
+    function saveTarget() { set(TARGET_KEY, $("target").value); updateGoal(); }
+
+    function addToGoal() {
+      const a = parseFloat($("addAmt").value) || 0;
+      savedTotal = r2(savedTotal + a);
+      set(SAVED_KEY, String(savedTotal));
+      addEdited = false;
+      updateGoal();
+      calculate();
+    }
+
+    function resetGoal() {
+      savedTotal = 0;
+      set(SAVED_KEY, "0");
+      updateGoal();
+    }
+
+    function updateGoal() {
+      const t = parseFloat($("target").value) || 0;
+      const pct = t > 0 ? (savedTotal / t) * 100 : 0;
+      const shown = Math.max(0, Math.min(100, pct));
+      $("saved").textContent = savedTotal.toFixed(2);
+      $("targetShown").textContent = t.toFixed(2);
+      $("goalPct").textContent = pct.toFixed(2);
+      $("barDone").style.width = shown + "%";
+      $("barDoneLbl").textContent = shown.toFixed(0) + "%";
+      $("barLeftLbl").textContent = (100 - shown).toFixed(0) + "%";
     }
 
     function copyAmount(cell) {
@@ -164,6 +306,7 @@
 
     loadState();
     calculate();
+    updateGoal();
   </script>
 
 </body>
