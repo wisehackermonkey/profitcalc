@@ -18,6 +18,7 @@
     #tm .col { display: flex; flex-direction: column; min-width: 0; }
     #tm .c { overflow: hidden; padding: 2px; box-sizing: border-box; border: 1px solid #fff; min-height: 0; }
     #settings { display: none; border: 1px solid #000; padding: 8px; margin: 8px 0; }
+    .disabled-cell { opacity: 0.35; pointer-events: none; user-select: none; -webkit-user-select: none; color: #888; }
   </style>
 </head>
 <body>
@@ -175,14 +176,14 @@
 
       $("profit").textContent          = profit.toFixed(2);
       $("owners").textContent          = owners.toFixed(2);
-      $("inv").textContent             = inv.toFixed(2);
+      $("inv").textContent             = (debtSplit ? 0 : inv).toFixed(2);
       $("tax").textContent             = tax.toFixed(2);
       $("opex").textContent            = opex.toFixed(2);
       $("total").textContent           = total.toFixed(2);
       $("opexPct").textContent         = opexPct.toFixed(2) + "%";
       $("profitFixedPct").textContent  = profitPct.toFixed(2) + "%";
       $("ownersFixedPct").textContent  = ownersPct.toFixed(2) + "%";
-      $("invFixedPct").textContent     = invPct.toFixed(2) + "%";
+      $("invFixedPct").textContent     = (debtSplit ? 0 : invPct).toFixed(2) + "%";
       $("taxFixedPct").textContent     = taxPct.toFixed(2) + "%";
       $("debtPct").textContent         = debtPct.toFixed(2) + "%";
       $("remainderPct").textContent    = remainderPct.toFixed(2) + "%";
@@ -196,7 +197,8 @@
       $("taxRow").style.opacity        = taxed ? "1" : "0.4";
       $("debtRow").style.display       = debtSplit ? "" : "none";
       $("remainderRow").style.display  = debtSplit ? "" : "none";
-      $("invRow").style.display        = debtSplit ? "none" : "";
+      $("invRow").style.display        = "";
+      $("profit").classList.toggle("disabled-cell", debtSplit);
 
       // OpEx split rows
       let html = "";
@@ -416,6 +418,7 @@
     }
 
     function copyAmount(cell) {
+      if (cell.classList.contains("disabled-cell")) return;
       const value = cell.textContent;
       if (!value) return;
 
