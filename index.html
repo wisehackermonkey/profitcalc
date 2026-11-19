@@ -9,10 +9,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BalanceCalc">
   <style>
-    #bar { display: flex; height: 28px; border: 1px solid #000; color: #fff; font-size: 14px; }
-    #bar div { display: flex; align-items: center; overflow: hidden; white-space: nowrap; padding: 0 4px; }
-    #barDone { background: #2e9e4f; }
-    #barLeft { background: #2f6fd6; justify-content: flex-end; flex: 1; }
+    .bar { display: flex; height: 28px; border: 1px solid #000; color: #fff; font-size: 14px; }
+    .bar div { display: flex; align-items: center; overflow: hidden; white-space: nowrap; padding: 0 4px; }
+    .done { background: #2e9e4f; }
+    .left { background: #2f6fd6; justify-content: flex-end; flex: 1; }
+    .goal { border: 1px solid #000; padding: 8px; margin: 8px 0; }
     #settings { display: none; border: 1px solid #000; padding: 8px; margin: 8px 0; }
   </style>
 </head>
@@ -36,6 +37,10 @@
     <button type="button" onclick="saveSettings()">Save</button>
     <button type="button" onclick="resetSettings()">Reset defaults</button>
     <div id="settingsSum"></div>
+    <br>
+    <button type="button" onclick="exportToml()">Export settings to TOML</button>
+    <button type="button" onclick="importToml()">Import TOML settings</button><br>
+    <textarea id="toml" rows="12" style="width:100%" placeholder="Paste TOML here to import"></textarea>
   </div>
 
   <br>
@@ -54,17 +59,9 @@
     <tr><td><strong>Total</strong></td><td></td><td id="total" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
   </table>
 
-  <h3>Goal</h3>
-  <label>Target: <input type="number" id="target" value="0" inputmode="decimal" oninput="updateGoal()"></label>
-  <button type="button" onclick="saveTarget()">Save Target</button><br><br>
-  <label>Add: <input type="number" id="addAmt" value="" inputmode="decimal" oninput="addEdited = true"></label>
-  <button type="button" onclick="addToGoal()">Add Towards Goal</button>
-  <button type="button" onclick="resetGoal()">Reset Progress</button>
-  <p>Saved: <span id="saved">0.00</span> / <span id="targetShown">0.00</span> (<span id="goalPct">0.00</span>%)</p>
-  <div id="bar">
-    <div id="barDone" style="width:0%"><span id="barDoneLbl">0%</span></div>
-    <div id="barLeft"><span id="barLeftLbl">100%</span></div>
-  </div>
+  <h3>Goals</h3>
+  <div id="goals"></div>
+  <button type="button" onclick="newGoal()">+ Goal</button>
 
   <script>
     const TAX_FULL_RATE = 1 - 25/29;               // ~13.79%
@@ -73,27 +70,36 @@
     const INV_FROM_PROFIT = INV_RATE - TAX_RATE;   // ~8.10% taken from profit
 
     const STORAGE_KEY  = "balanceCalcState";
-    const SETTINGS_KEY = "balanceCalcOpex";
-    const TARGET_KEY   = "balanceCalcTarget";
-    const SAVED_KEY    = "balanceCalcSaved";
+    const SETTINGS_KEY = "balanceCalcOpex2";
+    const GOALS_KEY    = "balanceCalcGoals";
 
     const DEFAULT_OPEX = [
       { n: "Labor", p: 57 },
       { n: "Accountant", p: 3 },
-      { n: "Biz Savings", p: 15 },
+      { n: "Biz Savings", p: 10 },
       { n: "War Chest", p: 5 },
       { n: "Equipment", p: 5 },
-      { n: "Christmas Bonus", p: 15 }
+      { n: "Christmas Bonus", p: 15 },
+      { n: "Company Car", p: 5 }
+    ];
+
+    const DEFAULT_GOALS = [
+      { n: "Christmas Bonus", t: 6000, s: 0 },
+      { n: "Company Car", t: 50000, s: 0 }
     ];
 
     let opexItems = DEFAULT_OPEX.map(x => ({ ...x }));
-    let savedTotal = 0;
-    let addEdited = false;
+    let goals = DEFAULT_GOALS.map(x => ({ ...x }));
+    let edited = {};   // goal index -> user edited the Add box
 
     const $ = id => document.getElementById(id);
 
     // Round to 2 decimals (half-up, float-safe)
     function r2(x) { return Math.round(x * 100 + 1e-6) / 100; }
+
+    // "1,000.00" <-> number
+    function num(s) { return parseFloat(String(s).replace(/,/g, "")) || 0; }
+    function fmt(n) { return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
     function get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
     function set(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
@@ -119,15 +125,14 @@
         }
         const o = get(SETTINGS_KEY);
         if (o) opexItems = JSON.parse(o);
-        const t = get(TARGET_KEY);
-        if (t !== null) $("target").value = t;
-        savedTotal = parseFloat(get(SAVED_KEY)) || 0;
+        const g = get(GOALS_KEY);
+        if (g) goals = JSON.parse(g);
       } catch (e) {}
     }
 
     function clearBalance() {
       $("balance").value = "";
-      addEdited = false;
+      edited = {};
       calculate();
     }
 
@@ -188,16 +193,26 @@
       if ($("opexSplit").checked) {
         opexItems.forEach(it => {
           const amt = opex * (parseFloat(it.p) || 0) / 100;
+          const gi = goals.findIndex(g => g.n.trim().toLowerCase() === String(it.n).trim().toLowerCase() && g.n.trim());
           html += "<tr><td>&nbsp;&nbsp;↳ " + esc(it.n) + "</td><td>" + (parseFloat(it.p) || 0).toFixed(2) +
-                  "%</td><td ontouchstart=\"copyAmount(this)\" onclick=\"copyAmount(this)\">" + amt.toFixed(2) + "</td></tr>";
+                  "%</td><td ontouchstart=\"copyAmount(this)\" onclick=\"copyAmount(this)\">" + amt.toFixed(2) + "</td>" +
+                  "<td>" + (gi >= 0 ? "<button type=\"button\" onclick=\"copyToAdd(" + gi + "," + r2(amt) + ")\">Copy to Add Target</button>" : "") + "</td></tr>";
         });
       }
       $("opexRows").innerHTML = html;
 
-      // Auto-fill add amount with current balance unless user edited it
-      if (!addEdited) $("addAmt").value = b ? b.toFixed(2) : "";
+      // Auto-fill each Add box with current balance unless user edited it
+      goals.forEach((g, i) => {
+        const el = $("add" + i);
+        if (el && !edited[i]) el.value = b ? fmt(b) : "";
+      });
 
       saveState();
+    }
+
+    function copyToAdd(i, amt) {
+      $("add" + i).value = fmt(amt);
+      edited[i] = true;
     }
 
     function esc(s) {
@@ -241,34 +256,135 @@
       calculate();
     }
 
-    // ---- Goal ----
-    function saveTarget() { set(TARGET_KEY, $("target").value); updateGoal(); }
+    // ---- TOML export / import ----
+    function q(s) { return '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n") + '"'; }
 
-    function addToGoal() {
-      const a = parseFloat($("addAmt").value) || 0;
-      savedTotal = r2(savedTotal + a);
-      set(SAVED_KEY, String(savedTotal));
-      addEdited = false;
-      updateGoal();
+    function exportToml() {
+      calculate();
+      let t = "[inputs]\nbalance = " + (parseFloat($("balance").value) || 0) +
+              "\nprofit_rate = " + (parseFloat($("profitRate").value) || 0) +
+              "\nowners_rate = " + (parseFloat($("ownersRate").value) || 0) +
+              "\ntaxed = " + $("taxed").checked +
+              "\ndebt_split = " + $("debtSplit").checked + "\n\n";
+      // Table rows (Item / Fixed % / Amount), derived from current inputs
+      const rows = [
+        ["Profit", "profitFixedPct", "profit"],
+        ["Debt Service", "debtPct", "debtService", "debtSplit"],
+        ["Remainder Profit", "remainderPct", "remainderProfit", "debtSplit"],
+        ["OwnComp", "ownersFixedPct", "owners"],
+        ["INV", "invFixedPct", "inv"],
+        ["Tax", "taxFixedPct", "tax"],
+        ["OpEx", "opexPct", "opex"],
+        ["Total", null, "total"]
+      ];
+      rows.forEach(r => {
+        if (r[3] && !$(r[3]).checked) return;
+        t += "[[items]]\nitem = " + q(r[0]) + "\n";
+        if (r[1]) t += "fixed_percent = " + parseFloat($(r[1]).textContent) + "\n";
+        t += "amount = " + parseFloat($(r[2]).textContent) + "\n\n";
+      });
+      const ob = parseFloat($("opex").textContent) || 0;
+      opexItems.forEach(it => {
+        const p = parseFloat(it.p) || 0;
+        t += "[[opex]]\nname = " + q(it.n) + "\npercent = " + p + "\namount = " + r2(ob * p / 100) + "\n\n";
+      });
+      goals.forEach(g => {
+        t += "[[goals]]\nname = " + q(g.n) + "\ntarget = " + g.t + "\nsaved = " + g.s + "\n\n";
+      });
+      $("toml").value = t;
+      try { navigator.clipboard.writeText(t); } catch (e) {}
+    }
+
+    function parseToml(text) {
+      const out = {};
+      let cur = null;
+      text.split(/\r?\n/).forEach(raw => {
+        const line = raw.trim();
+        if (!line || line[0] === "#") return;
+        let m = line.match(/^\[\[\s*(\w+)\s*\]\]/);
+        if (m) { (out[m[1]] = out[m[1]] || []).push(cur = {}); return; }
+        m = line.match(/^\[\s*(\w+)\s*\]/);
+        if (m) { out[m[1]] = cur = {}; return; }
+        m = line.match(/^(\w+)\s*=\s*(.*)$/);
+        if (!m || !cur) return;
+        const v = m[2].trim();
+        const s = v.match(/^"((?:[^"\\]|\\.)*)"/);
+        cur[m[1]] = s ? s[1].replace(/\\(.)/g, (x, c) => c === "n" ? "\n" : c)
+          : /^(true|false)\b/.test(v) ? v.startsWith("true") : parseFloat(v.replace(/_/g, ""));
+      });
+      return out;
+    }
+
+    function importToml() {
+      const d = parseToml($("toml").value);
+      if (!d.opex && !d.goals && !d.inputs) { alert("No settings found in TOML."); return; }
+      if (d.inputs) {
+        const i = d.inputs;
+        if (Number.isFinite(i.balance)) $("balance").value = i.balance || "";
+        if (Number.isFinite(i.profit_rate)) $("profitRate").value = i.profit_rate;
+        if (Number.isFinite(i.owners_rate)) $("ownersRate").value = i.owners_rate;
+        if (typeof i.taxed === "boolean") $("taxed").checked = i.taxed;
+        if (typeof i.debt_split === "boolean") $("debtSplit").checked = i.debt_split;
+      }
+      if (d.opex) opexItems = d.opex.map(x => ({ n: x.name || "", p: Number.isFinite(x.percent) ? x.percent : 0 }));
+      if (d.goals) goals = d.goals.map(x => ({
+        n: x.name || "",
+        t: Number.isFinite(x.target) ? x.target : 0,
+        s: Number.isFinite(x.saved) ? x.saved : 0
+      }));
+      set(SETTINGS_KEY, JSON.stringify(opexItems));
+      saveGoals();
+      edited = {};
+      renderSettings();
+      renderGoals();
       calculate();
     }
 
-    function resetGoal() {
-      savedTotal = 0;
-      set(SAVED_KEY, "0");
-      updateGoal();
+    // ---- Goals ----
+    function saveGoals() { set(GOALS_KEY, JSON.stringify(goals)); }
+
+    function renderGoals() {
+      $("goals").innerHTML = goals.map((g, i) =>
+        "<div class=\"goal\">" +
+        "<input type=\"text\" value=\"" + esc(g.n) + "\" placeholder=\"Goal name\" oninput=\"goals[" + i + "].n=this.value;calculate()\"> " +
+        "<button type=\"button\" onclick=\"delGoal(" + i + ")\">✕</button><br><br>" +
+        "<label>Target: <input type=\"text\" inputmode=\"decimal\" id=\"tgt" + i + "\" value=\"" + fmt(g.t) + "\" " +
+          "oninput=\"goals[" + i + "].t=num(this.value);updateGoal(" + i + ")\" onblur=\"this.value=fmt(num(this.value))\"></label> " +
+        "<button type=\"button\" onclick=\"saveGoals()\">Save Target</button><br><br>" +
+        "<label>Add: <input type=\"text\" inputmode=\"decimal\" id=\"add" + i + "\" " +
+          "oninput=\"edited[" + i + "]=true\" onblur=\"this.value=this.value?fmt(num(this.value)):''\"></label> " +
+        "<button type=\"button\" onclick=\"addToGoal(" + i + ")\">Add Towards Goal</button> " +
+        "<button type=\"button\" onclick=\"resetGoal(" + i + ")\">Reset</button>" +
+        "<p><span id=\"sv" + i + "\"></span> / <span id=\"tg" + i + "\"></span> (<span id=\"pc" + i + "\"></span>%)</p>" +
+        "<div class=\"bar\"><div class=\"done\" id=\"dn" + i + "\"></div><div class=\"left\" id=\"lf" + i + "\"></div></div>" +
+        "</div>"
+      ).join("");
+      goals.forEach((g, i) => updateGoal(i));
     }
 
-    function updateGoal() {
-      const t = parseFloat($("target").value) || 0;
-      const pct = t > 0 ? (savedTotal / t) * 100 : 0;
+    function newGoal() { goals.push({ n: "", t: 0, s: 0 }); saveGoals(); renderGoals(); calculate(); }
+    function delGoal(i) { goals.splice(i, 1); edited = {}; saveGoals(); renderGoals(); calculate(); }
+
+    function addToGoal(i) {
+      goals[i].s = r2(goals[i].s + num($("add" + i).value));
+      edited[i] = false;
+      saveGoals();
+      updateGoal(i);
+      calculate();
+    }
+
+    function resetGoal(i) { goals[i].s = 0; saveGoals(); updateGoal(i); }
+
+    function updateGoal(i) {
+      const g = goals[i];
+      const pct = g.t > 0 ? (g.s / g.t) * 100 : 0;
       const shown = Math.max(0, Math.min(100, pct));
-      $("saved").textContent = savedTotal.toFixed(2);
-      $("targetShown").textContent = t.toFixed(2);
-      $("goalPct").textContent = pct.toFixed(2);
-      $("barDone").style.width = shown + "%";
-      $("barDoneLbl").textContent = shown.toFixed(0) + "%";
-      $("barLeftLbl").textContent = (100 - shown).toFixed(0) + "%";
+      $("sv" + i).textContent = fmt(g.s);
+      $("tg" + i).textContent = fmt(g.t);
+      $("pc" + i).textContent = pct.toFixed(2);
+      $("dn" + i).style.width = shown + "%";
+      $("dn" + i).textContent = shown.toFixed(0) + "%";
+      $("lf" + i).textContent = (100 - shown).toFixed(0) + "%";
     }
 
     function copyAmount(cell) {
@@ -305,8 +421,8 @@
     }
 
     loadState();
+    renderGoals();
     calculate();
-    updateGoal();
   </script>
 
 </body>
