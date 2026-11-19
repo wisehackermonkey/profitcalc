@@ -19,6 +19,8 @@
     #tm .c { overflow: hidden; padding: 2px; box-sizing: border-box; border: 1px solid #fff; min-height: 0; }
     #settings { display: none; border: 1px solid #000; padding: 8px; margin: 8px 0; }
     .disabled-cell { opacity: 0.35; pointer-events: none; user-select: none; -webkit-user-select: none; color: #888; }
+    tr.off { opacity: 0.4; color: #888; }
+    tr.off td { pointer-events: none; user-select: none; -webkit-user-select: none; }
   </style>
 </head>
 <body>
@@ -53,8 +55,8 @@
   <table border="1" cellpadding="6">
     <tr><th>Item</th><th>Fixed %</th><th>Amount</th></tr>
     <tr><td>Profit</td><td id="profitFixedPct"></td><td id="profit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bancoppel</td></tr>
-    <tr id="debtRow" style="display:none"><td>&nbsp;&nbsp;↳ Debt Service (95% profit + INV)</td><td id="debtPct"></td><td id="debtService" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>to debt service</td></tr>
-    <tr id="remainderRow" style="display:none"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td id="remainderPct"></td><td id="remainderProfit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bancoppel leftover</td></tr>
+    <tr id="debtRow" class="off"><td>&nbsp;&nbsp;↳ Debt Service (95% profit + INV)</td><td id="debtPct"></td><td id="debtService" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>to debt service</td></tr>
+    <tr id="remainderRow" class="off"><td>&nbsp;&nbsp;↳ Remainder Profit (5%)</td><td id="remainderPct"></td><td id="remainderProfit" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bancoppel leftover</td></tr>
     <tr><td>OwnComp</td><td id="ownersFixedPct"></td><td id="owners" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>bbva personal </td></tr>
     <tr id="invRow"><td>INV</td><td id="invFixedPct"></td><td id="inv" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>Openbank</td></tr>
     <tr id="taxRow"><td>Tax</td><td id="taxFixedPct"></td><td id="tax" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>mercadopago</td></tr>
@@ -149,6 +151,7 @@
       const ownersRate = parseFloat($("ownersRate").value) / 100 || 0;
       const taxed      = $("taxed").checked;
       const debtSplit  = $("debtSplit").checked;
+      const opexSplit  = $("opexSplit").checked;
 
       const adjProfitRate = profitRate - INV_FROM_PROFIT;
 
@@ -194,23 +197,20 @@
       $("totalPct").textContent        = totalPct;
       $("tmTotal").textContent         = "(" + totalPct + ")";
 
-      $("taxRow").style.opacity        = taxed ? "1" : "0.4";
-      $("debtRow").style.display       = debtSplit ? "" : "none";
-      $("remainderRow").style.display  = debtSplit ? "" : "none";
-      $("invRow").style.display        = "";
+      $("taxRow").classList.toggle("off", !taxed);
+      $("debtRow").classList.toggle("off", !debtSplit);
+      $("remainderRow").classList.toggle("off", !debtSplit);
       $("profit").classList.toggle("disabled-cell", debtSplit);
 
-      // OpEx split rows
+      // OpEx split rows (always shown, grayed out when not selected)
       let html = "";
-      if ($("opexSplit").checked) {
-        opexItems.forEach(it => {
-          const amt = opex * (parseFloat(it.p) || 0) / 100;
-          const gi = goals.findIndex(g => g.n.trim().toLowerCase() === String(it.n).trim().toLowerCase() && g.n.trim());
-          html += "<tr><td>&nbsp;&nbsp;↳ " + esc(it.n) + "</td><td>" + (parseFloat(it.p) || 0).toFixed(2) +
-                  "%</td><td ontouchstart=\"copyAmount(this)\" onclick=\"copyAmount(this)\">" + amt.toFixed(2) + "</td>" +
-                  "<td>" + (gi >= 0 ? "<button type=\"button\" onclick=\"copyToAdd(" + gi + "," + r2(amt) + ")\">Copy to Add Target</button>" : "") + "</td></tr>";
-        });
-      }
+      opexItems.forEach(it => {
+        const amt = opex * (parseFloat(it.p) || 0) / 100;
+        const gi = goals.findIndex(g => g.n.trim().toLowerCase() === String(it.n).trim().toLowerCase() && g.n.trim());
+        html += "<tr" + (opexSplit ? "" : " class=\"off\"") + "><td>&nbsp;&nbsp;↳ " + esc(it.n) + "</td><td>" + (parseFloat(it.p) || 0).toFixed(2) +
+                "%</td><td ontouchstart=\"copyAmount(this)\" onclick=\"copyAmount(this)\">" + amt.toFixed(2) + "</td>" +
+                "<td>" + (gi >= 0 ? "<button type=\"button\"" + (opexSplit ? "" : " disabled") + " onclick=\"copyToAdd(" + gi + "," + r2(amt) + ")\">Copy to Add Target</button>" : "") + "</td></tr>";
+      });
       $("opexRows").innerHTML = html;
 
       // Treemap: OpEx split on the left, other items stacked on the right
@@ -219,7 +219,7 @@
           esc(n) + "</b><br>" + pct.toFixed(2) + "%</div>"
         : "";
       const oPct = Math.max(0, opexPct);
-      const oc = $("opexSplit").checked
+      const oc = opexSplit
         ? opexItems.map((it, k) =>
             cell(it.n, oPct * (parseFloat(it.p) || 0) / 100, "hsl(30 55% " + (28 + k * 4) + "%)")).join("")
         : cell("OpEx", oPct, "hsl(30 55% 38%)");
@@ -419,6 +419,7 @@
 
     function copyAmount(cell) {
       if (cell.classList.contains("disabled-cell")) return;
+      if (cell.closest("tr") && cell.closest("tr").classList.contains("off")) return;
       const value = cell.textContent;
       if (!value) return;
 
