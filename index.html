@@ -14,6 +14,9 @@
     .done { background: #2e9e4f; }
     .left { background: #2f6fd6; justify-content: flex-end; flex: 1; }
     .goal { border: 1px solid #000; padding: 8px; margin: 8px 0; }
+    #tm { display: flex; height: 320px; border: 1px solid #000; font-size: 11px; color: #fff; }
+    #tm .col { display: flex; flex-direction: column; min-width: 0; }
+    #tm .c { overflow: hidden; padding: 2px; box-sizing: border-box; border: 1px solid #fff; min-height: 0; }
     #settings { display: none; border: 1px solid #000; padding: 8px; margin: 8px 0; }
   </style>
 </head>
@@ -56,12 +59,15 @@
     <tr id="taxRow"><td>Tax</td><td id="taxFixedPct"></td><td id="tax" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>mercadopago</td></tr>
     <tr><td>OpEx</td><td id="opexPct"></td><td id="opex" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td><td>banorte</td></tr>
     <tbody id="opexRows"></tbody>
-    <tr><td><strong>Total</strong></td><td></td><td id="total" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
+    <tr><td><strong>Total</strong></td><td id="totalPct"></td><td id="total" ontouchstart="copyAmount(this)" onclick="copyAmount(this)"></td></tr>
   </table>
 
   <h3>Goals</h3>
   <div id="goals"></div>
   <button type="button" onclick="newGoal()">+ Goal</button>
+
+  <h3>Breakdown <span id="tmTotal"></span></h3>
+  <div id="tm"></div>
 
   <script>
     const TAX_FULL_RATE = 1 - 25/29;               // ~13.79%
@@ -183,6 +189,10 @@
       $("debtService").textContent     = debtService.toFixed(2);
       $("remainderProfit").textContent = remainderProfit.toFixed(2);
 
+      const totalPct = r2(profitPct + ownersPct + invPct + (taxed ? taxPct : 0) + opexPct).toFixed(2) + "%";
+      $("totalPct").textContent        = totalPct;
+      $("tmTotal").textContent         = "(" + totalPct + ")";
+
       $("taxRow").style.opacity        = taxed ? "1" : "0.4";
       $("debtRow").style.display       = debtSplit ? "" : "none";
       $("remainderRow").style.display  = debtSplit ? "" : "none";
@@ -200,6 +210,24 @@
         });
       }
       $("opexRows").innerHTML = html;
+
+      // Treemap: OpEx split on the left, other items stacked on the right
+      const cell = (n, pct, color) => pct > 0
+        ? "<div class=\"c\" style=\"flex:" + pct + ";background:" + color + "\" title=\"" + esc(n) + ": " + fmt(b * pct / 100) + "\"><b>" +
+          esc(n) + "</b><br>" + pct.toFixed(2) + "%</div>"
+        : "";
+      const oPct = Math.max(0, opexPct);
+      const oc = $("opexSplit").checked
+        ? opexItems.map((it, k) =>
+            cell(it.n, oPct * (parseFloat(it.p) || 0) / 100, "hsl(30 55% " + (28 + k * 4) + "%)")).join("")
+        : cell("OpEx", oPct, "hsl(30 55% 38%)");
+      const rc = (debtSplit
+          ? cell("Debt Service", debtPct, "hsl(130 50% 32%)") + cell("Remainder Profit", remainderPct, "hsl(150 45% 28%)")
+          : cell("Profit", profitPct, "hsl(130 50% 32%)") + cell("INV", invPct, "hsl(270 40% 42%)")) +
+        cell("OwnComp", ownersPct, "hsl(210 55% 40%)") + (taxed ? cell("Tax", taxPct, "hsl(0 50% 42%)") : "");
+      const rPct = profitPct + ownersPct + invPct + (taxed ? taxPct : 0);
+      $("tm").innerHTML = "<div class=\"col\" style=\"flex:" + oPct + "\">" + oc + "</div>" +
+                          "<div class=\"col\" style=\"flex:" + Math.max(0, rPct) + "\">" + rc + "</div>";
 
       // Auto-fill each Add box with current balance unless user edited it
       goals.forEach((g, i) => {
